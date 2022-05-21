@@ -3,24 +3,24 @@ import spatial.dsl._
 package custom {
 
   @struct class RGB(
-                     red: FixPt[TRUE, _16, _16],
-                     green: FixPt[TRUE, _16, _16],
-                     blue: FixPt[TRUE, _16, _16],
-                     pad: FixPt[TRUE, _16, _16]
+                     red: Float,
+                     green: Float,
+                     blue: Float,
+                     pad: Float
                    )
 
   @struct class Point(
-                       x: FixPt[TRUE, _16, _16],
-                       y: FixPt[TRUE, _16, _16],
-                       z: FixPt[TRUE, _16, _16],
-                       pad: FixPt[TRUE, _16, _16]
+                       x: Float,
+                       y: Float,
+                       z: Float,
+                       pad: Float
                      )
 
   @struct class Vec3(
-                      x_mag: FixPt[TRUE, _16, _16],
-                      y_mag: FixPt[TRUE, _16, _16],
-                      z_mag: FixPt[TRUE, _16, _16],
-                      pad: FixPt[TRUE, _16, _16]
+                      x_mag: Float,
+                      y_mag: Float,
+                      z_mag: Float,
+                      pad: Float
                     )
 
   @struct class Ray(
@@ -30,19 +30,19 @@ package custom {
 
   @struct class Sphere(
                       center: Point,
-                      radius: FixPt[TRUE, _16, _16],
+                      radius: Float,
                       pad0: FixPt[TRUE, _32, _32],
-                      pad1: FixPt[TRUE, _16, _16]
+                      pad1: Float
                       )
 
   @struct class Hit_Record(
                           p: Point,
                           normal: Vec3,
-                          t: FixPt[TRUE, _16, _16],
+                          t: Float,
                           pad0: FixPt[TRUE, _32, _32],
                           pad1: FixPt[TRUE, _32, _32],
                           pad2: FixPt[TRUE, _32, _32],
-                          pad3: FixPt[TRUE, _16, _16]
+                          pad3: Float
                           )
 
 }

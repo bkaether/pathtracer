@@ -6,13 +6,17 @@ import scala.util.Random
 
 @spatial object pathtracer extends SpatialApp {
 
-  type T = FixPt[TRUE, _16, _16]
+  type T = Float
   type U = FixPt[TRUE, _32, _32]
-  // type V = FixPt[TRUE, _64, _64]
 
   val pad: T = 0.to[T]
   val pad64: U = 0.to[U]
-  // val pad128: V = 0.to[V]
+
+  def floatMult(a: Float, b: Float): Float = {
+    val r = Reg[Float](0.to[Float]).buffer
+    r := a * b
+    r.value
+  }
 
   // Create a vector from two points
   def createVec(point1: Point, point2: Point): Vec3 = {
@@ -41,7 +45,7 @@ import scala.util.Random
 
   // Multiply RGB by a scalar
   def mult_RGB_scalar(a: RGB, b: T): RGB = {
-    RGB(a.red * b, a.green * b, a.blue * b, pad)
+    RGB(floatMult(a.red, b), floatMult(a.green, b), floatMult(a.blue, b), pad)
   }
 
   // Divide Vec3 by a scalar
@@ -51,18 +55,18 @@ import scala.util.Random
 
   // Multiply a Vec3 by a scalar
   def mult_Vec3_scalar(a: Vec3, b: T): Vec3 = {
-    Vec3(a.x_mag * b, a.y_mag * b, a.z_mag * b, pad)
+    Vec3(floatMult(a.x_mag, b), floatMult(a.y_mag, b), floatMult(a.z_mag, b), pad)
   }
 
   // Take dot product between two vectors
   def dot(a: Vec3, b: Vec3): T = {
-    (a.x_mag*b.x_mag) + (a.y_mag*b.y_mag) + (a.z_mag*b.z_mag)
+    floatMult(a.x_mag, b.x_mag) + floatMult(a.y_mag, b.y_mag) + floatMult(a.z_mag, b.z_mag)
   }
 
   // Get unit vector given a Vec3
   def get_unit_vec(a: Vec3): Vec3 = {
-    val length_squared = (a.x_mag*a.x_mag) + (a.y_mag*a.y_mag) + (a.z_mag*a.z_mag)
-    Vec3((a.x_mag * a.x_mag) / length_squared, (a.y_mag * a.y_mag) / length_squared, (a.z_mag * a.z_mag) / length_squared, pad)
+    val length_squared = floatMult(a.x_mag, a.x_mag) + floatMult(a.y_mag, a.y_mag) + floatMult(a.z_mag, a.z_mag)
+    Vec3(floatMult(a.x_mag, a.x_mag) / length_squared, floatMult(a.y_mag, a.y_mag) / length_squared, floatMult(a.z_mag, a.z_mag) / length_squared, pad)
   }
 
   // Calculate a point along a ray
@@ -91,13 +95,6 @@ import scala.util.Random
     val image_height = 225.to[Int]
     val samples_per_pixel = 100.to[Int]
 
-    val C = ArgIn[Int]
-    val R = ArgIn[Int]
-    val S = ArgIn[Int]
-    setArg(C, image_width)
-    setArg(R, image_height)
-    setArg(S, samples_per_pixel)
-
     // World
     val object_count = 2.to[Int]
 
@@ -107,43 +104,37 @@ import scala.util.Random
     setMem(world_d, world)
 
 
-    // Camera
-    val viewport_height = 2.to[T]
-    val viewport_width: T = aspect_ratio * viewport_height
-    val focal_length = 1.to[T]
-
-    val origin = ArgIn[Point]
-    setArg(origin, Point(0.0, 0.0, 0.0, pad))
-
-    val horizontal = ArgIn[Vec3]
-    setArg(horizontal, Vec3(viewport_width, 0.to[T], 0.to[T], pad))
-
-    val vertical = ArgIn[Vec3]
-    setArg(vertical, Vec3(0.to[T], viewport_height, 0.to[T], pad))
-
-    val z_dir = ArgIn[Vec3]
-    setArg(z_dir, Vec3(0.to[T], 0.to[T], focal_length, pad))
-
-    val lower_left_corner = ArgIn[Point]
-    setArg(lower_left_corner, Point(0.to[T] - getArg(horizontal).x_mag / 2.to[T],
-                                    0.to[T] - getArg(vertical).y_mag / 2.to[T],
-                                    0.to[T] - getArg(z_dir).z_mag,
-                                    pad))
-
-    // Max T used for calculating distance
-    val max_float = ArgIn[T]
-    setArg(max_float, Float.PositiveInfinity.to[T])
-
     // Set up DRAM for RGB values
-    val pixel_colors_d = DRAM[RGB](R, C)
+    val pixel_colors_d = DRAM[RGB](image_height, image_width)
 
     // Set up dram for random values used by the accelerator
-    val rand_data = Array.tabulate[T](getArg(S)) {i => Random.nextFloat().to[T]}
-    val rand = DRAM[T](getArg(S))
+    val rand_data = Array.tabulate[T](samples_per_pixel) {i => Random.nextFloat().to[T]}
+    val rand = DRAM[T](samples_per_pixel)
     setMem(rand, rand_data)
 
 
     Accel {
+
+      val C = image_width
+      val R = image_height
+      val S = samples_per_pixel
+
+      // Camera
+      val viewport_height = 2.to[T]
+      val viewport_width: T = floatMult(aspect_ratio, viewport_height)
+      val focal_length = 1.to[T]
+
+      val origin = Point(0.0, 0.0, 0.0, pad)
+      val horizontal = Vec3(viewport_width, 0.to[T], 0.to[T], pad)
+      val vertical = Vec3(0.to[T], viewport_height, 0.to[T], pad)
+      val z_dir = Vec3(0.to[T], 0.to[T], focal_length, pad)
+      val lower_left_corner = Point(0.to[T] - horizontal.x_mag / 2.to[T],
+                              0.to[T] - vertical.y_mag / 2.to[T],
+                              0.to[T] - z_dir.z_mag,
+                              pad)
+
+      // Max Float used for calculating distance
+      val max_float = 16777215.to[T]   // 2^24 - 1
 
       // Prepare SRAM space for pixel colors
       val pixel_colors_s = SRAM[RGB](image_height, image_width)
@@ -162,11 +153,16 @@ import scala.util.Random
           val pixel_color = Reg[RGB]
           Reduce(pixel_color)(0 until S by 1.to[Int]) { s =>
 
-            val u = (i.to[T] + rand_s(s)) / (C - 1.to[Int]).to[T]
-            val v = ((R - j).to[T] + rand_s(s)) / (R - 1.to[Int]).to[T]
 
-            val x_mag = lower_left_corner.x + (horizontal.x_mag * u)
-            val y_mag = lower_left_corner.y + (vertical.y_mag * v)
+            val u = (i.to[T] + rand_s(s)) / (C - 1.to[Int]).to[T]
+            val mult_x = floatMult(horizontal.x_mag, u)
+
+            val v = ((R - j).to[T] + rand_s(s)) / (R - 1.to[Int]).to[T]
+            val mult_y = floatMult(vertical.y_mag, v)
+
+            val x_mag = lower_left_corner.x + mult_x
+
+            val y_mag = lower_left_corner.y + mult_y
             val z_mag = lower_left_corner.z
             val ray = Ray(origin, Vec3(x_mag, y_mag, z_mag, pad))
 
@@ -176,19 +172,19 @@ import scala.util.Random
               val oc = createVec(world_s(obj).center, ray.orig)
 
               // length squared of Ray direction
-              val a = (ray.dir.x_mag * ray.dir.x_mag) + (ray.dir.y_mag * ray.dir.y_mag) + (ray.dir.z_mag * ray.dir.z_mag)
+              val a = floatMult(ray.dir.x_mag, ray.dir.x_mag) + floatMult(ray.dir.y_mag, ray.dir.y_mag) + floatMult(ray.dir.z_mag, ray.dir.z_mag)
 
               // Vector dot product between oc and ray direction
               val half_b = dot(oc, ray.dir)
 
-              // oc length squared / sphere radius squared
-              val c = ((oc.x_mag * oc.x_mag) + (oc.y_mag * oc.y_mag) + (oc.z_mag * oc.z_mag)) - (world_s(obj).radius * world_s(obj).radius)
+              // oc length squared - sphere radius squared
+              val c = (floatMult(oc.x_mag, oc.x_mag) + floatMult(oc.y_mag, oc.y_mag) + floatMult(oc.z_mag, oc.z_mag)) - floatMult(world_s(obj).radius, world_s(obj).radius)
 
-              val discriminant = (half_b * half_b) - (a * c)
+              val discriminant = floatMult(half_b, half_b) - floatMult(a, c)
               if (discriminant > 0) {
                 val sqrtd = sqrt_approx(discriminant)
-                val root0 = ((half_b * -1.to[T]) - sqrtd) / a
-                val root1 = ((half_b * -1.to[T]) + sqrtd) / a
+                val root0 = (floatMult(half_b, -1.to[T]) - sqrtd) / a
+                val root1 = (floatMult(half_b, -1.to[T]) + sqrtd) / a
                 if (root0 > 0) {
                   val contact_point = at(ray, root0)
                   val outward_normal = set_face_normal(ray, div_Vec3_scalar(createVec(world_s(obj).center, contact_point), world_s(obj).radius))
@@ -215,7 +211,7 @@ import scala.util.Random
               mult_RGB_scalar(add_RGB_Vec3(RGB(1.to[T], 1.to[T], 1.to[T], pad), closest_hit.normal), 0.5.to[T])
             } else {
               val unit_direction = get_unit_vec(ray.dir)
-              val t = 0.5.to[T] * (unit_direction.y_mag + 1.to[T])
+              val t = floatMult(0.5.to[T], unit_direction.y_mag + 1.to[T])
               add_RGB(mult_RGB_scalar(RGB(1.to[T], 1.to[T], 1.to[T], pad), 1.to[T] - t),
                       mult_RGB_scalar(RGB(0.5.to[T], 0.7.to[T], 1.to[T], pad), t))
             }
@@ -229,14 +225,14 @@ import scala.util.Random
 
     Foreach(image_height by 1, image_width by 1) { (i, j) =>
       val scale = 1.to[T] / samples_per_pixel.to[T]
-      val scaled_r = clamp(result(i, j).red * scale, 0.to[T], 0.999.to[T])
-      val scaled_g = clamp(result(i, j).green * scale, 0.to[T], 0.999.to[T])
-      val scaled_b = clamp(result(i, j).blue * scale, 0.to[T], 0.999.to[T])
-      pw.print(256.to[T] * scaled_r)
+      val scaled_r = clamp(floatMult(result(i, j).red, scale), 0.to[T], 0.999.to[T])
+      val scaled_g = clamp(floatMult(result(i, j).green, scale), 0.to[T], 0.999.to[T])
+      val scaled_b = clamp(floatMult(result(i, j).blue, scale), 0.to[T], 0.999.to[T])
+      pw.print(floatMult(256.to[T], scaled_r))
       pw.print(" ")
-      pw.print(256.to[T] * scaled_g)
+      pw.print(floatMult(256.to[T], scaled_g))
       pw.print(" ")
-      pw.print(256.to[T] * scaled_b)
+      pw.print(floatMult(256.to[T], scaled_b))
       pw.print("\n")
     }
 
