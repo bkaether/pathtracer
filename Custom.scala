@@ -29,10 +29,10 @@ package custom {
                    )
 
   @struct class Sphere(
-                      center: Point,
+                      center_x: Float,
+                      center_y: Float,
+                      center_z: Float,
                       radius: Float,
-                      pad0: FixPt[TRUE, _32, _32],
-                      pad1: Float
                       )
 
   @struct class Hit_Record(
