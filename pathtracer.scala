@@ -20,7 +20,7 @@ import scala.util.Random
 
   // Find the min between two floats
   def min(a: Hit_Record, b: Hit_Record): Hit_Record = {
-    if (a.t <= b.t) a else b
+    mux(a.t <= b.t, a, b)
   }
 
   // Add 2 RGB structs
@@ -60,7 +60,7 @@ import scala.util.Random
 
   // Get unit vector given a Vec3
   def get_unit_vec(a: Vec3): Vec3 = {
-    val length_squared = (a.x_mag * a.x_mag) + (a.y_mag * a.y_mag) + (a.z_mag * a.z_mag)
+    val length_squared = ((a.x_mag * a.x_mag) + (a.y_mag * a.y_mag) + (a.z_mag * a.z_mag))
     Vec3((a.x_mag * a.x_mag) / length_squared, (a.y_mag * a.y_mag) / length_squared, (a.z_mag * a.z_mag) / length_squared, pad)
   }
 
@@ -70,14 +70,11 @@ import scala.util.Random
   }
 
   def set_face_normal(r: Ray, outward_normal: Vec3): Vec3 = {
-    val front_face = dot(r.dir, outward_normal) < 0
-    if (front_face) outward_normal else mult_Vec3_scalar(outward_normal, -1.to[T])
+    mux(dot(r.dir, outward_normal) < 0, outward_normal, mult_Vec3_scalar(outward_normal, -1.to[T]))
   }
 
   def clamp(x: T, min: T, max: T): T = {
-    if (x < min) min
-    else if (x > max) max
-    else x
+    mux(x < min, min, mux(x > max, max, x))
   }
 
   def main(args: Array[String]): Unit = {
@@ -86,7 +83,7 @@ import scala.util.Random
     val aspect_ratio = 2.to[T] / 2.to[T]
     val image_width = 2.to[Int]
     val image_height = 2.to[Int]
-    val samples_per_pixel = 1.to[Int]
+    val samples_per_pixel = 2.to[Int]
 
     // World
     val object_count = 2.to[Int]
@@ -106,7 +103,9 @@ import scala.util.Random
     setMem(rand, rand_data)
 
     // DRAM for debugging
-    val dram_debug = DRAM[T](8, 2)
+    val dram_discrim = DRAM[T](8, 4)
+    val dram_closest_hit = DRAM[T](4)
+    val dram_raw_color = DRAM[T](4, 3)
 
     Accel {
 
@@ -143,17 +142,19 @@ import scala.util.Random
       rand_s load rand
 
       // SRAM for debugging
-      val sram_debug = SRAM[T](8, 2)
+      val sram_discrim = SRAM[T](8, 4)
+      val sram_closest_hit = SRAM[T](4)
+      val sram_raw_color = SRAM[T](4, 3)
 
       // Render
-      Foreach(1 until (R + 1.to[Int])) { j =>
-        Foreach(0 until C by 1.to[Int]) { i =>
+      Foreach(0 until R by 1.to[Int] par 2) { j =>
+        Foreach(0 until C by 1.to[Int] par 2) { i =>
           val pixel_color = Reg[RGB]
           Reduce(pixel_color)(0 until S by 1.to[Int] /*par 4*/) { s =>
 
 
             val u = (i.to[T] + rand_s(s)) / (C - 1.to[Int]).to[T]
-            val v = ((R - j).to[T] + rand_s(s)) / (R - 1.to[Int]).to[T]
+            val v = ((R - 1.to[Int] - j).to[T] + rand_s(s)) / (R - 1.to[Int]).to[T]
 
             val x_mag = lower_left_corner.x + (horizontal.x_mag * u)
             val y_mag = lower_left_corner.y + (vertical.y_mag * v)
@@ -177,20 +178,20 @@ import scala.util.Random
               val c = ((oc.x_mag * oc.x_mag) + (oc.y_mag * oc.y_mag) + (oc.z_mag * oc.z_mag)) - (world_s(obj).radius * world_s(obj).radius)
 
               // Store values for debugging
-              // sram_debug(((j - 1) * 4) + (i * 2) + obj, 0) = a
-              // sram_debug(((j - 1) * 4) + (i * 2) + obj, 1) = half_b
-              // sram_debug(((j - 1) * 4) + (i * 2) + obj, 2) = c
+              // sram_debug((j * 4) + (i * 2) + obj, 0) = a
+              // sram_debug((j * 4) + (i * 2) + obj, 1) = half_b
+              // sram_debug((j * 4) + (i * 2) + obj, 2) = c
 
               val discriminant = (half_b * half_b) - (a * c)
-              val sqrtd = mux(discriminant > 0, sqrt_approx(discriminant), 0)
-              val root0 = ((half_b * -1.to[T]) - sqrtd) / a
-              val root1 = ((half_b * -1.to[T]) + sqrtd) / a
+              val sqrtd = mux(discriminant > 0, sqrt(discriminant), 0)
+              val root0 = mux(discriminant > 0, ((half_b * -1.to[T]) - sqrtd) / a, 0)
+              val root1 = mux(discriminant > 0, ((half_b * -1.to[T]) + sqrtd) / a, 0)
 
               // Store values for debugging
-              sram_debug(((j - 1) * 4) + (i * 2) + obj, 0) = discriminant
-              sram_debug(((j - 1) * 4) + (i * 2) + obj, 1) = sqrtd
-              // sram_debug(((j - 1) * 4) + (i * 2) + obj, 2) = root0
-              // sram_debug(((j - 1) * 4) + (i * 2) + obj, 3) = root1
+              sram_discrim((j * 4) + (i * 2) + obj, 0) = discriminant
+              sram_discrim((j * 4) + (i * 2) + obj, 1) = sqrtd
+              sram_discrim((j * 4) + (i * 2) + obj, 2) = root0
+              sram_discrim((j * 4) + (i * 2) + obj, 3) = root1
 
               val contact_point0 = at(ray, root0)
               val outward_normal0 = set_face_normal(ray, div_Vec3_scalar(createVec(center, contact_point0), world_s(obj).radius))
@@ -201,47 +202,35 @@ import scala.util.Random
               val hit_1 = Hit_Record(contact_point1, outward_normal1, root1, pad64, pad64, pad64, pad)
 
               val empty_record = Hit_Record(Point(0.to[T], 0.to[T], 0.to[T], pad),
-                                 Vec3(0.to[T], 0.to[T], 0.to[T], pad),
-                                 max_float,
-                                 pad64, pad64, pad64, pad)
+                                            Vec3(0.to[T], 0.to[T], 0.to[T], pad),
+                                            max_float,
+                                            pad64, pad64, pad64, pad)
 
               mux(discriminant > 0, mux(root0 > 0, hit_0, mux(root1 > 0, hit_1, empty_record)), empty_record)
 
-              /*
-              if (discriminant > 0) {
-                val sqrtd = sqrt_approx(discriminant)
-                val root0 = ((half_b * -1.to[T]) - sqrtd) / a
-                val root1 = ((half_b * -1.to[T]) + sqrtd) / a
-                if (root0 > 0) {
-                  val contact_point = at(ray, root0)
-                  val outward_normal = set_face_normal(ray, div_Vec3_scalar(createVec(center, contact_point), world_s(obj).radius))
-                  Hit_Record(contact_point, outward_normal, root0, pad64, pad64, pad64, pad)
-                } else if (root1 > 0) {
-                  val contact_point = at(ray, root1)
-                  val outward_normal = set_face_normal(ray, div_Vec3_scalar(createVec(center, contact_point), world_s(obj).radius))
-                  Hit_Record(contact_point, outward_normal, root1, pad64, pad64, pad64, pad)
-                } else {
-                  Hit_Record(Point(0.to[T], 0.to[T], 0.to[T], pad),
-                             Vec3(0.to[T], 0.to[T], 0.to[T], pad),
-                             max_float,
-                             pad64, pad64, pad64, pad)
-                }
-              } else {
-                Hit_Record(Point(0.to[T], 0.to[T], 0.to[T], pad),
-                           Vec3(0.to[T], 0.to[T], 0.to[T], pad),
-                           max_float,
-                           pad64, pad64, pad64, pad)
-              }
-              */
             }{min(_,_)}
-            val hit_color = mult_RGB_scalar(add_RGB_Vec3(RGB(1.to[T], 1.to[T], 1.to[T], pad), closest_hit.value.normal), 0.5.to[T])
 
-            val unit_direction = get_unit_vec(ray.dir)
-            val t = 0.5.to[T] * (unit_direction.y_mag + 1.to[T])
-            val miss_color = add_RGB(mult_RGB_scalar(RGB(1.to[T], 1.to[T], 1.to[T], pad), 1.to[T] - t),
-                             mult_RGB_scalar(RGB(0.5.to[T], 0.7.to[T], 1.to[T], pad), t))
-            mux(closest_hit.value.t < max_float, hit_color, miss_color)
+            // val hit_color = mult_RGB_scalar(add_RGB_Vec3(RGB(1.to[T], 1.to[T], 1.to[T], pad), closest_hit.value.normal), 0.5.to[T])
+            val hit_color = RGB(4.to[T], 4.to[T], 4.to[T], pad)
+
+//            val unit_direction = get_unit_vec(ray.dir)
+//            val t = 0.5.to[T] * (unit_direction.y_mag + 1.to[T])
+//            val miss_color = add_RGB(mult_RGB_scalar(RGB(1.to[T], 1.to[T], 1.to[T], pad), 1.to[T] - t),
+//                             mult_RGB_scalar(RGB(0.5.to[T], 0.7.to[T], 1.to[T], pad), t))
+            val miss_color = RGB(1.to[T], 1.to[T], 1.to[T], pad)
+
+            // Store values for debugging
+            sram_closest_hit((j * 2) + i) = closest_hit.value.t
+
+
+            mux(closest_hit.value.t.to[T] < max_float, hit_color, miss_color)
           }{add_RGB(_,_)}
+
+          // Store values for debugging
+          sram_raw_color((j * 2) + i, 0) = pixel_color.value.red
+          sram_raw_color((j * 2) + i, 1) = pixel_color.value.green
+          sram_raw_color((j * 2) + i, 2) = pixel_color.value.blue
+
           val scale = 1.to[T] / samples_per_pixel.to[T]
           val scaled_r = clamp(pixel_color.value.red * scale, 0.to[T], 0.999.to[T]) * 256.to[T]
           val scaled_g = clamp(pixel_color.value.green * scale, 0.to[T], 0.999.to[T]) * 256.to[T]
@@ -252,11 +241,15 @@ import scala.util.Random
       pixel_colors_d store pixel_colors_s
 
       // Store debugging values
-      dram_debug store sram_debug
+      dram_discrim store sram_discrim
+      dram_closest_hit store sram_closest_hit
+      dram_raw_color store sram_raw_color
     }
     val result = getMatrix(pixel_colors_d)
     writeCSV2D(result, "image.csv")
 
-    printMatrix(getMatrix(dram_debug))
+    printMatrix(getMatrix(dram_discrim))
+    printArray(getArray(dram_closest_hit))
+    printMatrix(getMatrix(dram_raw_color))
   }
 }
