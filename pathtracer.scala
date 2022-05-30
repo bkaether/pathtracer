@@ -223,7 +223,7 @@ import scala.util.Random
             sram_closest_hit((j * 2) + i) = closest_hit.value.t
 
 
-            mux(closest_hit.value.t.to[T] < max_float, hit_color, miss_color)
+            mux(closest_hit.value.t < max_float, hit_color, miss_color)
           }{add_RGB(_,_)}
 
           // Store values for debugging
