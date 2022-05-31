@@ -13,6 +13,8 @@ import spatial.dsl._
     val argOutTest = ArgOut[I32]
     val ip = I32(4)
 
+    val nInstructions = 4
+
     Accel {
 //      val data0 = LUT[F](4)(1.to[F], 2.to[F], 3.14.to[F], 5.12354234.to[F])
 //      val data1 = LUT[F](4)(13.3254234.to[F], 12321.to[F], 12.to[F], 9.232.to[F])
@@ -48,10 +50,10 @@ import spatial.dsl._
       }
 
       // Implement a FPU.
+      val accumReg = Reg[T](0.to[T])
       val fpu = new FPU()
 
-      val accumReg = Reg[T](0.to[T])
-      Sequential.Foreach(4 by 1) { instIndex =>
+      Sequential.Foreach(nInstructions by 1) { instIndex =>
         Sequential {
           val lhs = data0(instIndex)
           val rhs = data1(instIndex)
