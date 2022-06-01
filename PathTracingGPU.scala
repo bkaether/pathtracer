@@ -125,7 +125,8 @@ trait Types {
           val divVal = lv / rv
           val mulVal = lv * rv
           val subVal = lv - rv
-          resultQueue.enq(mux(op == ADD, addVal, mux(op == SUB, subVal, mux(op == DIV, divVal, mulVal))))
+          val binOpResult = mux(op == ADD, addVal, mux(op == SUB, subVal, mux(op == DIV, divVal, mulVal)))
+          resultQueue.enq(binOpResult)
         }
 
         def execND(): Void = {
