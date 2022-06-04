@@ -78,6 +78,14 @@ import scala.util.Random
     mux(x < min, min, mux(x > max, max, x))
   }
 
+  def fast_sqrt(n: T): T = {
+    val guess = sqrt_approx(n)
+    val iter0 = 0.5.to[T] * (guess + (n / guess))
+    val iter1 = 0.5.to[T] * (iter0 + (n / iter0))
+    val iter2 = 0.5.to[T] * (iter1 + (n / iter1))
+    iter2
+  }
+
   def main(args: Array[String]): Unit = {
 
     // Image
@@ -138,11 +146,10 @@ import scala.util.Random
       // rand_s load rand
 
       // Render
-      Foreach(0 until R by 1.to[Int] par 8) { j =>
-        Foreach(0 until C by 1.to[Int] par 5) { i =>
+      Foreach(0 until R by 1.to[Int] par 5, 0 until C by 1.to[Int] par 5) { (j, i) =>
+        // Foreach(0 until C by 1.to[Int] par 5) { i =>
           // val pixel_color = Reg[RGB]
           // Reduce(pixel_color)(0 until S by 1.to[Int] par 2) { s =>
-
 
             val u = (i.to[T] + /*rand_s(s)*/ 0.5.to[T]) / (C - 1.to[Int]).to[T]
             val v = ((R - 1.to[Int] - j).to[T] + /*rand_s(s)*/ 0.5.to[T]) / (R - 1.to[Int]).to[T]
@@ -169,7 +176,7 @@ import scala.util.Random
               val c = ((oc.x_mag * oc.x_mag) + (oc.y_mag * oc.y_mag) + (oc.z_mag * oc.z_mag)) - (world_s(obj).radius * world_s(obj).radius)
 
               val discriminant = (half_b * half_b) - (a * c)
-              val sqrtd = mux(discriminant > 0, sqrt(discriminant), 0)
+              val sqrtd = mux(discriminant > 0, fast_sqrt(discriminant), 0)
               val root0 = mux(discriminant > 0, ((half_b * -1.to[T]) - sqrtd) / a, 0)
               val root1 = mux(discriminant > 0, ((half_b * -1.to[T]) + sqrtd) / a, 0)
 
@@ -205,7 +212,7 @@ import scala.util.Random
           val scaled_g = clamp(pixel_color.green, 0.to[T], 0.999.to[T]) * 256.to[T]
           val scaled_b = clamp(pixel_color.blue, 0.to[T], 0.999.to[T]) * 256.to[T]
           pixel_colors_s(j, i) = RGB(scaled_r, scaled_g, scaled_b, pad)
-        }
+        // }
       }
       pixel_colors_d store pixel_colors_s
     }
