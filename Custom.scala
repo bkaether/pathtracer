@@ -25,14 +25,14 @@ package custom {
 
   @struct class Ray(
                    orig: Point,
-                   dir: Vec3,
+                   dir: Vec3
                    )
 
   @struct class Sphere(
                       center_x: FixPt[TRUE, _24, _8],
                       center_y: FixPt[TRUE, _24, _8],
                       center_z: FixPt[TRUE, _24, _8],
-                      radius: FixPt[TRUE, _24, _8],
+                      radius: FixPt[TRUE, _24, _8]
                       )
 
   @struct class Hit_Record(
